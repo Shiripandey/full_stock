@@ -1,59 +1,47 @@
+require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 
-
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000; // Use the port from .env or default to 5000
 
-app.use(cors(
-  {
-    origin: '*',
-    methods:["POST","GET"],
-    credentials:true
-  }
-));
+// Enable CORS for all origins
+app.use(cors({
+  origin: '*',
+  methods: ["POST", "GET"],
+  credentials: true
+}));
 
- app.use(function (req, res, next) {
-    //Enabling CORS
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, 
-    Accept, x-client-key, x-client-token, x-client-secret, Authorization");
-      next();
-    });
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  next();
+});
 
-const polygonApiKey = 'QlOE7feVp6mhdVa4sovHtWyAhpB3BIAb';
+// Use environment variable for API key
+const polygonApiKey = process.env.POLYGON_API_KEY; 
 const stocksFile = path.join(__dirname, 'stocks.json');
 
-// Helper function to generate a random number between min and max (inclusive)
-const getRandomInterval = (min, max) => Math.floor(Math.random() * (max - min + 1) + min) * 1000;
-
-// Function to fetch the list of 20 stocks and their open prices from Polygon API
+// Function to fetch stock list from Polygon API
 const fetchStockList = async () => {
   try {
-    if (!fs.existsSync(stocksFile)) {
-      // Create an empty file if it doesn't exist
-      console.log('File does not exist. Creating an empty file:', stocksFile);
-      fs.writeFileSync(stocksFile, '[]');
-    }
-
     const response = await axios.get(`https://api.polygon.io/v3/reference/tickers?sort=ticker&perpage=20&page=1&apiKey=${polygonApiKey}`);
     const stocks = response.data.results.map(stock => ({
       symbol: stock.ticker,
-      openPrice: stock.open,
-      refreshInterval: getRandomInterval(1, 5),
+      openPrice: stock.open || 0, // Fallback to 0 if open price is missing
       lastUpdated: Date.now(),
     }));
     fs.writeFileSync(stocksFile, JSON.stringify(stocks, null, 2));
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching stock list:", error);
   }
 };
 
-// Function to update stock prices at random intervals
+// Function to update stock prices every second
 const updateStockPrices = () => {
   setInterval(() => {
     try {
@@ -64,14 +52,13 @@ const updateStockPrices = () => {
       });
       fs.writeFileSync(stocksFile, JSON.stringify(stocks, null, 2));
     } catch (error) {
-      console.error(error);
+      console.error("Error updating stock prices:", error);
     }
   }, 1000); // Run every second
 };
 
 // Expose an API to fetch stock prices
 app.get('/api/stocks', (req, res) => {
-    console.log('Incoming request to /api/stocks', req.query);
   try {
     const stocks = JSON.parse(fs.readFileSync(stocksFile, 'utf-8'));
     res.json(stocks);
@@ -79,14 +66,13 @@ app.get('/api/stocks', (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-})
-
-
+});
 
 // Run the initial setup to fetch stock list and start updating prices
 fetchStockList();
 updateStockPrices();
 
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-})
+});
